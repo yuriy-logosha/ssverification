@@ -1,7 +1,10 @@
 #!/usr/bin/env python3
-import pymongo, logging, time
-import datetime, os
+import datetime
+import os
 
+import logging
+import pymongo
+import time
 from bson import ObjectId
 
 from utils import json_from_file, MyHTMLParser, json_to_file, _get
@@ -14,6 +17,12 @@ try:
 except RuntimeError as e:
     print(e)
     exit()
+
+ss_ad_collection = config['ss_ad_collection']
+geodata_collection = config['geodata_collection']
+resolved = []
+not_exist_resolver = []
+not_found = []
 
 if not os.path.exists('requests'):
     os.makedirs('requests')
@@ -79,7 +88,7 @@ def generate_report(ads={}, new_ads=[], new_address=[]):
 
 def uload_new_records(new_ads):
     try:
-        ss_ads.ads.insert_many(new_ads)
+        db[ss_ad_collection].insert_many(new_ads)
     except RuntimeError as e:
         logger.error(e)
 
@@ -132,12 +141,12 @@ def build_db_record(items):
 
 def verify_address(url, address):
     logger.debug(f"Verifying {address} url: {url}")
-    return list(ss_ads.ads.find({"url": f"{url}", "address": f"{address}"}))
+    return list(db[ss_ad_collection].find({"url": f"{url}", "address": f"{address}"}))
 
 
 def verify_geodata(address):
     logger.debug(f"Verifying Geodata: {address}")
-    return list(ss_ads.geodata.find({"address": f"{address}"}))
+    return list(db[geodata_collection].find({"address": f"{address}"}))
 
 
 def is_property(param: str) -> bool:
@@ -184,52 +193,67 @@ def find_by_url(url, address, ads):
                 return i
     raise NotFound(url, address)
 
-resolved = []
 
-def resolve_diff_price(ad_old, ad_new):
-    global ss_ads, resolved
-    print('old_price', ad_old['price'], ad_new['price'])
-    resolved.append({'old':ad_old, 'new':ad_new})
-    # ss_ads.insert_one({'kind': 'old_price', 'ad_id': ObjectId(ad_old['_id']), 'price': ad_old['price'], 'date': datetime.datetime.utcnow()})
-    # ss_ads.update_one({'_id': ObjectId(ad_old['_id'])}, {'$set': {'price':ad_new['price']}})
+def resolve_diff_key(ad_old, ad_new, key):
+    global db, resolved
+    print('old_' + key, ad_old[key], ad_new[key])
+    # resolved.append({'kind': 'old_' + key, 'old': ad_old, 'new': ad_new})
+    try:
+        old_price_record = {'kind': 'old_' + key, 'ad_id': ObjectId(ad_old['_id']), 'price': ad_old['price'],
+                            'date': datetime.datetime.utcnow()}
+        # del ad_old['_id']
+        # result = db[ss_ad_collection].insert_one(ad_old)
+        result = db[ss_ad_collection].insert_one(old_price_record)
+        if not result.inserted_id:
+            raise Exception('Not inserted', old_price_record)
+        result = db[ss_ad_collection].update_one({'_id': ad_old['_id']}, {'$set': {key: ad_new[key]}})
+        if not result.matched_count:
+            raise Exception('Not updated record', ad_old['_id'])
+    except Exception as e:
+        logger.error(e)
 
 
-def skip(*args): pass
-def skipError(*args): raise SkipError()
-class SkipError(Exception):pass
-class NotFoundResolver(Exception):pass
-class NotFound(Exception):pass
+def resolve_update_key(ad_old, ad_new, key):
+    global db, resolved
+    print('old_' + key, ad_old[key], ad_new[key])
+    resolved.append({'kind': 'old_' + key, 'old': ad_old, 'new': ad_new})
+    result = db[ss_ad_collection].update_one({'_id': ObjectId(ad_old['_id'])}, {'$set': {key:ad_new[key]}})
+    if not result.matched_count:
+        raise Exception('Not updated record', ad_old['_id'])
+
+
+def skip(*args, **kwargs): pass
+
+
+class NotFound(Exception): pass
+
 
 mapping = {
-    'price':resolve_diff_price,
-    'price_m2':skip,
-    'm2':skip,
-    'level':skip,
-    'rooms':skip,
-    'kind':skip,
-    'date':skipError,
-    '_id':skipError,
+    'price': resolve_diff_key,
+    'price_m2': resolve_update_key,
+    'm2': resolve_update_key,
+    'level': resolve_update_key,
+    'rooms': resolve_update_key
 }
 
-def get(d:dict, key:str) -> object:
+
+def get(d: dict, key: str) -> object:
     try:
         return d[key]
     except KeyError as e:
         if key in ['_id', 'date', 'kind']:
-            return None
+            return skip
         raise e
 
 
-def compare(a, ad):
-    for key in a.keys():
-        if get(a, key) != get(ad, key):
+def compare(my_ad, remote_ad):
+    for key in my_ad.keys():
+        if get(my_ad, key) != get(remote_ad, key):
             try:
-                mapping[key](a, ad)
-            except SkipError as e:
-                pass
-            except Exception as e:
-                print(key, a[key], ad[key])
-                raise NotFoundResolver()
+                get(mapping, key)(my_ad, remote_ad, key=key)
+            except KeyError as e:
+                logger.error('Key error:' + key)
+                not_exist_resolver.append({'kind': 'old_' + key, 'old': my_ad, 'new': remote_ad})
 
 
 while True:
@@ -237,55 +261,33 @@ while True:
         myclient = pymongo.MongoClient(config["db.url"])
 
         with myclient:
-            ss_ads = myclient.ss_ads
-            diff = ss_ads['diff']
+            db = myclient.ss_ads
 
             data = request_ss_records()
 
-            ads = build_model(data)
+            remote_ads = build_model(data)
 
-            my_ads = list(ss_ads.ads.find({'kind':'ad'}))
+            my_ads = list(db[ss_ad_collection].find({'kind': 'ad'}))
 
-            not_exist_resolver = []
-            not_found = []
-            for a in my_ads:
+            for my_ad in my_ads:
                 try:
-                    ad = find_by_url(a['url'], a['address'], ads)
-                    result = compare(a, ad)
-                except NotFoundResolver as e:
-                    not_exist_resolver.append(a)
+                    remote_ad = find_by_url(my_ad['url'], my_ad['address'], remote_ads)
+                    result = compare(my_ad, remote_ad)
                 except NotFound as e:
-                    not_found.append(a)
-
+                    not_found.append(my_ad)
 
             print('------Resolved. ----------------------------------')
-            for a in resolved:
-                print(a)
-                ad_old = a['old']
-                ad_new = a['new']
-                ss_ads.ads.insert_one({'kind': 'old_price', 'ad_id': ObjectId(ad_old['_id']), 'price': ad_old['price'], 'date': datetime.datetime.utcnow()})
-                ss_ads.ads.update_one({'_id': ObjectId(ad_old['_id'])}, {'$set': {'price':ad_new['price']}})
-            # print('---------------------------------------------------')
+            for my_ad in resolved:
+                print(my_ad)
+
             print('Resolved', len(resolved))
 
             print('------Not found record on ss.-----------------------')
-            # for a in not_found:
-            #     print(a)
-            # print('---------------------------------------------------')
             print('Not found', len(not_found))
 
             print('------Not existing resolver.-----------------------')
-            # for a in not_exist_resolver:
-            #     print(a)
-            # print('---------------------------------------------------')
             print('Not exist resolver', len(not_exist_resolver))
 
-            # if is_property('report'):
-            #     generate_report(ads, new_ads, new_address)
-            #
-            # if is_property('export') and 'export.filename' in config:
-            #     logger.info("Exporting to file: %s", config['export.filename'])
-            #     export_to_file(ads)
     except RuntimeError as e:
         logger.error(e)
 

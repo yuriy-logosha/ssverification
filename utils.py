@@ -64,6 +64,7 @@ class MyHTMLParser(HTMLParser):
         self.path = []
         self.data = []
         self.valid_tags = []
+        self.skip_tags = []
         self.parsers = {}
         self.current_tag = None
         self.is_current_tag_valid = False
@@ -80,12 +81,16 @@ class MyHTMLParser(HTMLParser):
         self.current_tag = tag
         if not self.is_current_tag_valid:
             return
+        if self.is_skip(tag):
+            return
         self.data.append((tag, attrs))
         super(self.__class__, self).handle_starttag(tag, attrs)
 
     def handle_endtag(self, tag):
         i = len(self.path) - 1 - self.path[::-1].index(tag)
         self.path = self.path[:i]
+
+
         self.is_current_tag_valid = self.valid(tag)
         self.current_tag = None
         if not self.is_current_tag_valid:
@@ -116,8 +121,12 @@ class MyHTMLParser(HTMLParser):
     def valid(self, tag):
         if len(self.valid_tags) > 0:
             return True if tag in self.valid_tags else False
-        else:
-            return True
+        return True
+
+    def is_skip(self, tag):
+        if len(self.skip_tags) > 0:
+            return True if tag in self.skip_tags else False
+        return False
 
     def feed_and_return(self, data):
         self.feed(data)

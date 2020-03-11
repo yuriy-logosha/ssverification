@@ -109,7 +109,8 @@ def request_ss_records():
     try:
         for url in config["sites"]:
             logger.info(f"Looking for new records in {url}")
-            page = MyHTMLParser({'valid_tags': ['tr', 'td', 'a']}).feed_and_return(_get(url).text)
+            parser_config = {'valid_tags': ['tr', 'td', 'a', 'br', 'b'], 'skip_tags': ['b']}
+            page = MyHTMLParser(parser_config).feed_and_return(_get(url).text)
             pages, last = extract_pages(page.data)
             data += page.data
             pages_max = last.split('page')[1].split('.')[0]
@@ -117,7 +118,7 @@ def request_ss_records():
             for p in range(2, int(pages_max)):
                 _url = f"{config['sscom.url']}{last.replace(pages_max, str(p))}"
                 logger.debug(f"Looking for new records in rest of pages {_url}")
-                data += MyHTMLParser({'valid_tags': ['tr', 'td', 'a', 'br']}).feed_and_return(_get(_url).text).data
+                data += MyHTMLParser(parser_config).feed_and_return(_get(_url).text).data
     except RuntimeError as e:
         logger.debug(e)
     return data

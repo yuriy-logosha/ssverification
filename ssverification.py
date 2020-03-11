@@ -60,7 +60,7 @@ def is_item(item):
 
 
 def is_url(item):
-    return len(item) >= 3 and item[0] == 'a' and len(item[1]) > 2 and len(item[1][2]) > 1 and item[1][2][1] == config[
+    return len(item) >= 2 and item[0] == 'a' and len(item[1]) > 2 and len(item[1][2]) > 1 and item[1][2][1] == config[
         "sscom.class.url"]
 
 
@@ -89,17 +89,6 @@ def generate_report(ads={}, new_ads=[], new_address=[]):
 def uload_new_records(new_ads):
     try:
         db[ss_ad_collection].insert_many(new_ads)
-    except RuntimeError as e:
-        logger.error(e)
-
-
-def export_to_file(ads):
-    try:
-        ads_for_json = ads.copy()
-        for a in ads_for_json:
-            for i in ads_for_json[a]['items']:
-                i['date'] = str(i['date'])
-        json_to_file(config['export.filename'], ads_for_json)
     except RuntimeError as e:
         logger.error(e)
 
@@ -138,16 +127,6 @@ def build_db_record(items):
     except RuntimeError as e:
         logger.debug(e)
     return a
-
-
-def verify_address(url, address):
-    logger.debug(f"Verifying {address} url: {url}")
-    return list(db[ss_ad_collection].find({"url": f"{url}", "address": f"{address}"}))
-
-
-def verify_geodata(address):
-    logger.debug(f"Verifying Geodata: {address}")
-    return list(db[geodata_collection].find({"address": f"{address}"}))
 
 
 def is_property(param: str) -> bool:
@@ -272,7 +251,7 @@ while True:
 
             for my_ad in my_ads:
                 try:
-                    remote_ad = find_by_url(my_ad['url'], my_ad['address'], remote_ads)
+                    remote_ad = find_by_url(my_ad['url'], my_ad['address_lv'], remote_ads)
                     result = compare(my_ad, remote_ad)
                 except NotFound as e:
                     not_found.append(my_ad)

@@ -276,16 +276,11 @@ while True:
                 except NotFound as e:
                     not_found.append(my_ad)
 
-            print('------Resolved. ----------------------------------')
             for my_ad in resolved:
                 print(my_ad)
 
             print('Resolved', len(resolved))
-
-            print('------Not found record on ss.-----------------------')
             print('Not found', len(not_found))
-
-            print('------Not existing resolver.-----------------------')
             print('Not exist resolver', len(not_exist_resolver))
 
     except RuntimeError as e:

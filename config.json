@@ -17,5 +17,7 @@
   "logging.file": "ssrequester.log",
   "logging.level": 10,
   "db.url": "mongodb://192.168.1.61:27017/",
-  "restart": 0
+  "ss_ad_collection": "ss_ad",
+  "geodata_collection": "geodata",
+  "restart": 900
 }

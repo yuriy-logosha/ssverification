@@ -20,9 +20,6 @@ except RuntimeError as e:
 
 ss_ad_collection = config['ss_ad_collection']
 geodata_collection = config['geodata_collection']
-resolved = []
-not_exist_resolver = []
-not_found = []
 
 if not os.path.exists('requests'):
     os.makedirs('requests')
@@ -116,7 +113,7 @@ def request_ss_records():
 def build_db_record(items):
     a = {}
     try:
-        a = {'url': config['sscom.url'] + items[0], 'address': items[1],
+        a = {'url': "/".join(items[0].split('/')[3:]), 'address': items[1],
              'date': datetime.datetime.utcnow()}
         if len(items) == 6:
             a.update({'m2': items[2], 'level': items[3], 'type': config['house.marker'],
@@ -168,16 +165,18 @@ def build_model(data):
 
 def find_by_url(url, address, ads):
     for a in ads:
-        for i in ads[a]['items']:
-            if i['url'] == url and i['address'] == address:
-                return i
-    raise NotFound(url, address)
+        if a == address:
+            for i in ads[a]['items']:
+                if i['url'] == url:
+                    return i
+            break
+    return None
 
 
 def resolve_diff_key(ad_old, ad_new, key):
     global db, resolved
     print('old_' + key, ad_old[key], ad_new[key])
-    # resolved.append({'kind': 'old_' + key, 'old': ad_old, 'new': ad_new})
+    resolved.append({'kind': 'old_' + key, 'old': ad_old, 'new': ad_new})
     try:
         old_price_record = {'kind': 'old_' + key, 'ad_id': ObjectId(ad_old['_id']), 'price': ad_old['price'],
                             'date': datetime.datetime.utcnow()}
@@ -197,7 +196,18 @@ def resolve_update_key(ad_old, ad_new, key):
     global db, resolved
     print('old_' + key, ad_old[key], ad_new[key])
     resolved.append({'kind': 'old_' + key, 'old': ad_old, 'new': ad_new})
-    result = db[ss_ad_collection].update_one({'_id': ObjectId(ad_old['_id'])}, {'$set': {key:ad_new[key]}})
+    result = db[ss_ad_collection].update_one({'_id': ad_old['_id']}, {'$set': {key:ad_new[key]}})
+    if not result.matched_count:
+        raise Exception('Not updated record', ad_old['_id'])
+
+
+def resolve_rooms(ad_old, ad_new, key):
+    global db, resolved
+    if ad_new[key] == 'Citi':
+        return
+    print('old_' + key, ad_old[key], ad_new[key])
+    resolved.append({'kind': 'old_' + key, 'old': ad_old, 'new': ad_new})
+    result = db[ss_ad_collection].update_one({'_id': ad_old['_id']}, {'$set': {key:ad_new[key]}})
     if not result.matched_count:
         raise Exception('Not updated record', ad_old['_id'])
 
@@ -213,7 +223,7 @@ mapping = {
     'price_m2': resolve_update_key,
     'm2': resolve_update_key,
     'level': resolve_update_key,
-    'rooms': resolve_update_key
+    'rooms': resolve_rooms
 }
 
 
@@ -221,7 +231,7 @@ def get(d: dict, key: str) -> object:
     try:
         return d[key]
     except KeyError as e:
-        if key in ['_id', 'date', 'kind']:
+        if key in ['_id', 'date', 'kind', 'address', 'address_lv', 'type', 'outdated', 'rooms']:
             return skip
         raise e
 
@@ -236,7 +246,27 @@ def compare(my_ad, remote_ad):
                 not_exist_resolver.append({'kind': 'old_' + key, 'old': my_ad, 'new': remote_ad})
 
 
+def get_address(ad):
+    if 'address_lv' in ad:
+        return ad['address_lv']
+    if 'address' in ad:
+        return ad['address']
+    return None
+
+def outdate(my_ad):
+    if 'outdated' in my_ad:
+        return
+    outdated.append(my_ad)
+    result = db[ss_ad_collection].update_one({'_id': my_ad['_id']}, {'$set': {'outdated': True}})
+    if not result.matched_count == 1:
+        logger.error("%s not updated properly.", my_ad['_id'])
+
+
 while True:
+    resolved = []
+    not_exist_resolver = []
+    outdated = []
+
     try:
         myclient = pymongo.MongoClient(config["db.url"])
 
@@ -250,17 +280,17 @@ while True:
             my_ads = list(db[ss_ad_collection].find({'kind': 'ad'}))
 
             for my_ad in my_ads:
-                try:
-                    remote_ad = find_by_url(my_ad['url'], my_ad['address_lv'], remote_ads)
-                    result = compare(my_ad, remote_ad)
-                except NotFound as e:
-                    not_found.append(my_ad)
+                remote_ad = find_by_url(my_ad['url'], get_address(my_ad), remote_ads)
+                if remote_ad:
+                    compare(my_ad, remote_ad)
+                else:
+                    outdate(my_ad)
 
             for my_ad in resolved:
                 print(my_ad)
 
             print('Resolved', len(resolved))
-            print('Not found', len(not_found))
+            print('Outdated', len(outdated))
             print('Not exist resolver', len(not_exist_resolver))
 
     except RuntimeError as e:

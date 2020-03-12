@@ -13,7 +13,7 @@
   "logging.file": "ssverification.log",
   "logging.level": 10,
   "db.url": "mongodb://192.168.1.61:27017/",
-  "ss_ad_collection": "ss_ad",
+  "ss_ad_collection": "ads",
   "geodata_collection": "geodata",
   "restart": 900
 }

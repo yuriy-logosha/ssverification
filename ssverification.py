@@ -101,7 +101,7 @@ def request_ss_records():
             data += page.data
             pages_max = last.split('page')[1].split('.')[0]
 
-            for p in range(2, int(pages_max)):
+            for p in range(2, int(pages_max)+1):
                 _url = f"{config['sscom.url']}{last.replace(pages_max, str(p))}"
                 logger.debug(f"Looking for new records in rest of pages {_url}")
                 data += MyHTMLParser(parser_config).feed_and_return(_get(_url).text).data

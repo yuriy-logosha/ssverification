@@ -2,7 +2,9 @@
   "sites": [
     "https://www.ss.com/lv/real-estate/flats/riga/centre/sell/",
     "https://www.ss.com/lv/real-estate/flats/riga/purvciems/sell/",
-    "https://www.ss.com/lv/real-estate/homes-summer-residences/riga/all/sell/"
+    "https://www.ss.com/lv/real-estate/flats/riga/teika/sell/",
+    "https://www.ss.com/lv/real-estate/homes-summer-residences/riga/all/sell/",
+    "https://www.ss.com/lv/real-estate/homes-summer-residences/riga-region/all/sell/"
   ],
   "sscom.url": "https://www.ss.com",
   "sscom.class.url": "am",

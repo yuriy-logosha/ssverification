@@ -422,10 +422,10 @@ def _get(url, params=None, session=None, log_folder='requests/', *args, **kwargs
         r = requests.get(url, params, *args)
     if not r or not r.ok:
         raise RequestError(r.reason, url)
-    timestamp = datetime.now().strftime('%Y%m%d %H %M %S %f')[:-3]
-    name = log_folder + "%s-get" % timestamp
-    to_file(name + ".txt", "%s %s %s" % (url, params, r.status_code))
-    to_file(name + ".html", r.text)
+    # timestamp = datetime.now().strftime('%Y%m%d %H %M %S %f')[:-3]
+    # name = log_folder + "%s-get" % timestamp
+    # to_file(name + ".txt", "%s %s %s" % (url, params, r.status_code))
+    # to_file(name + ".html", r.text)
     return r
 
 
@@ -436,8 +436,8 @@ def _gete(url, params=None, session=None, *args, **kwargs):
         r = requests.get(url, params, args)
     timestamp = datetime.now().strftime('%Y%m%d %H %M %S %f')[:-3]
     name = "requests/%s-get" % timestamp
-    to_file(name + ".txt", "%s %s" % (url, params))
-    to_file(name + ".html", r.text)
+    # to_file(name + ".txt", "%s %s" % (url, params))
+    # to_file(name + ".html", r.text)
     return r, name + ".html"
 
 
@@ -447,10 +447,10 @@ def _poste(url, params, headers, session=None, *args, **kwargs):
     else:
         session = requests.Session()
         r = session.post(url, params, *args)
-    timestamp = datetime.now().strftime('%Y%m%d %H %M %S %f')[:-3]
-    name = "requests/%s-post" % timestamp
-    to_file(name + ".txt", "%s %s" % (url, params))
-    to_file(name + ".html", r.text)
+    # timestamp = datetime.now().strftime('%Y%m%d %H %M %S %f')[:-3]
+    # name = "requests/%s-post" % timestamp
+    # to_file(name + ".txt", "%s %s" % (url, params))
+    # to_file(name + ".html", r.text)
     return r, session
 
 
